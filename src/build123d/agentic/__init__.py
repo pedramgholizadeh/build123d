@@ -13,6 +13,11 @@ mechanical design agent. The recommended agent loop:
 5. report: markdown context, assumption list and impact analysis
 """
 
+from build123d.agentic.interference import (
+    InterferencePair,
+    InterferenceReport,
+    check_interference,
+)
 from build123d.agentic.spatial_context import (
     SpatialContext,
     shape_facts,
@@ -24,4 +29,8 @@ __all__ = [
     "SpatialContext",
     "shape_facts",
     "spatial_context",
+    # interference
+    "InterferencePair",
+    "InterferenceReport",
+    "check_interference",
 ]
