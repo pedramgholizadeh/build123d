@@ -207,6 +207,37 @@ export_step(part_context.part, "bracket.step")
 
 More [Examples](https://build123d.readthedocs.io/en/latest/introductory_examples.html) and [Tutorials](https://build123d.readthedocs.io/en/latest/tutorials.html) are found in the documentation.
 
+## Agentic CAD layer
+
+build123d models are code, so AI agents can write them — but code alone gives an agent no space, no consequences and no memory of what depends on what. This fork adds **`build123d.agentic`**, a self-contained layer that turns a code-writing agent into a mechanical design agent:
+
+| Module | What it gives the agent |
+|---|---|
+| `spatial_context` | measured spatial context: coordinates, bounding boxes, analytic surface equations (plane/cylinder/cone/sphere/torus) — geometry as context, never guessed |
+| `interference` | pairwise interference / contact / clearance detection with real kernel booleans — physics in the loop |
+| `parameters` | engineering parameters with epistemic status (measured / specified / calculated / estimated) so assumptions cannot pose as facts |
+| `feature_graph` | the spatial context graph: features as nodes, adjacency/joints/constraints/tolerances as edges, plus change-impact analysis |
+| `snippets` | parametric part snippets, a registry (parts-library connection point) and composition with provenance manifests |
+| `ui_bridge` | the manifest + rebuild-and-validate protocol that drag-and-drop UIs and agents both drive |
+| `rag` | static, retrieval-ready chunking of CAD code for RAG pipelines |
+
+```py
+from build123d import Box, Compound, Cylinder, Pos
+from build123d.agentic import SpatialContext, check_interference, FeatureGraph
+
+housing = Box(40, 40, 30); housing.label = "housing"
+impeller = Cylinder(12, 20); impeller.label = "impeller"
+pump = Compound(children=[housing, impeller], label="pump")
+
+print(SpatialContext(pump).to_markdown())   # measured space for the prompt
+print(check_interference(pump).to_markdown())  # housing <-> impeller: INTERFERENCE ...
+graph = FeatureGraph.from_model(pump)       # what does a change affect?
+```
+
+The intended loop — context → plan → build → **verify** → report — and the
+full manual live in [`docs/agentic/`](docs/agentic/overview.md); agents
+should read [`AGENTS.md`](AGENTS.md) first.
+
 ## Installation
 
 For additional installation options see [Installation](https://build123d.readthedocs.io/en/latest/installation.html)
