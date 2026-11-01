@@ -71,8 +71,10 @@ which snippet produced this part, with which parameters.
 
 ## Relationship to other layers
 
-- `FeatureGraph.from_model()` turns a composed model into nodes; attach the
-  manifest's params to the nodes for a fully-labeled graph.
+- Instantiated shapes **carry their parameters** (`shape.parameters`,
+  `shape.parameter_status`, `shape.snippet` provenance), so
+  `FeatureGraph.from_model()` turns a composed model into a fully labeled,
+  fully parameterized graph automatically — no manual bookkeeping.
 - `ParametricModel` (see [UI Bridge](ui-bridge.md)) can wrap a snippet-
   composed build function to get the rebuild-and-validate loop.
 - `chunk_file()` from [RAG indexing](rag-indexing.md) tags `@snippet`

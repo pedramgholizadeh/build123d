@@ -343,12 +343,31 @@ class SnippetRegistry:
             raise TypeError(
                 f"snippet '{name}' must return a build123d Shape, got {type(shape).__name__}"
             )
+        _carry_parameters(shape, name, meta, applied)
         return shape, applied
 
 
 #: Registry the @snippet decorator registers into by default, and the one
 #: compose() uses when no explicit registry is passed.
 DEFAULT_REGISTRY = SnippetRegistry()
+
+
+def _carry_parameters(
+    shape: Shape, name: str, meta: SnippetMeta, applied: dict[str, Any]
+) -> None:
+    """Attach provenance and applied parameters to the built shape.
+
+    FeatureGraph.from_model reads these attributes, so a composed model
+    turns into a fully labeled, fully parameterized graph without manual
+    bookkeeping: parameters carry status "specified" (deliberate design
+    decisions made by the snippet author and the caller).
+    """
+    try:
+        shape.parameters = dict(applied)
+        shape.parameter_status = {param: "specified" for param in applied}
+        shape.snippet = {"name": name, "version": meta.version}
+    except AttributeError:  # pragma: no cover - shapes are plain objects
+        pass
 
 
 def compose(

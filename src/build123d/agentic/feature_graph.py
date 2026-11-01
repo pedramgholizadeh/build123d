@@ -483,11 +483,16 @@ class FeatureGraph:
                     getattr(shape, "parameters", {}) or {}
                 ).items()
             }
+            # per-shape statuses (e.g. snippet provenance) outrank the
+            # caller's global mapping
+            statuses = dict(getattr(shape, "parameter_status", {}) or {})
+            snippet = getattr(shape, "snippet", None)
             graph.add_feature(
                 name,
                 kind=type(shape).__name__.lower(),
                 params=labeled_params or None,
-                param_status=dict(param_status or {}),
+                param_status={**dict(param_status or {}), **statuses},
+                metadata={"snippet": snippet} if snippet else None,
             )
 
         # joints in a second pass: connect_to may point at features whose
@@ -508,23 +513,24 @@ class FeatureGraph:
                         name, other_name, RelationType.JOINT, joint=joint_label
                     )
 
-        report = check_interference(parts, precision=precision)
-        for pair in report.pairs:
-            if pair.status == "contact":
-                graph.relate(
-                    pair.a,
-                    pair.b,
-                    RelationType.ADJACENT,
-                    contact_area=pair.contact_area,
-                )
-            elif (
-                pair.status == "clearance"
-                and pair.clearance is not None
-                and pair.clearance <= max_clearance
-            ):
-                graph.relate(
-                    pair.a, pair.b, RelationType.CLEARANCE, measured=pair.clearance
-                )
+        if len(parts) >= 2:  # single-part models have nothing to check
+            report = check_interference(parts, precision=precision)
+            for pair in report.pairs:
+                if pair.status == "contact":
+                    graph.relate(
+                        pair.a,
+                        pair.b,
+                        RelationType.ADJACENT,
+                        contact_area=pair.contact_area,
+                    )
+                elif (
+                    pair.status == "clearance"
+                    and pair.clearance is not None
+                    and pair.clearance <= max_clearance
+                ):
+                    graph.relate(
+                        pair.a, pair.b, RelationType.CLEARANCE, measured=pair.clearance
+                    )
         return graph
 
     # ---- Export ----

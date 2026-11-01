@@ -159,3 +159,35 @@ class TestCompose:
         composition = compose(["test_post"], label="single")
         assert composition.result.label == "single"
         assert composition.entries[0]["snippet"] == "test_post"
+
+
+class TestParameterCarriage:
+    def test_instantiated_shape_carries_parameters(self):
+        registry = SnippetRegistry()
+        registry.register(make_plate)
+        shape, applied = registry.instantiate("test_plate", width=30.0)
+        assert applied == {"width": 30.0, "thickness": 3.0}
+        assert shape.parameters == {"width": 30.0, "thickness": 3.0}
+        assert shape.parameter_status == {
+            "width": "specified",
+            "thickness": "specified",
+        }
+        assert shape.snippet == {"name": "test_plate", "version": "0.1.0"}
+
+    def test_graph_picks_up_carried_parameters(self):
+        from build123d import Compound
+
+        from build123d.agentic import FeatureGraph, ParamStatus
+
+        registry = SnippetRegistry()
+        registry.register(make_plate)
+        shape, _ = registry.instantiate("test_plate", width=30.0)
+        shape.label = "plate"
+        graph = FeatureGraph.from_model(Compound(children=[shape]))
+        node = graph.nodes["plate"]
+        assert node.params["width"].value == 30.0
+        assert node.params["width"].status is ParamStatus.SPECIFIED
+        assert node.metadata["snippet"] == {
+            "name": "test_plate",
+            "version": "0.1.0",
+        }

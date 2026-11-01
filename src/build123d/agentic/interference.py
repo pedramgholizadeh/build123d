@@ -192,7 +192,8 @@ def named_parts(parts: Mapping[str, Shape] | Shape) -> list[tuple[str, Shape]]:
     shape = parts
     if isinstance(shape, Compound):
         leaves = _tree_leaves(shape)
-        if len(leaves) > 1:
+        # a compound whose single leaf is itself is just one named part
+        if leaves and not (len(leaves) == 1 and leaves[0] is shape):
             root = getattr(shape, "label", "") or "model"
             names: list[str] = []
             named: list[tuple[str, Shape]] = []
