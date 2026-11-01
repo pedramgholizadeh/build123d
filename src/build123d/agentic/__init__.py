@@ -13,6 +13,15 @@ mechanical design agent. The recommended agent loop:
 5. report: markdown context, assumption list and impact analysis
 """
 
+from build123d.agentic.feature_graph import (
+    FeatureGraph,
+    FeatureNode,
+    ImpactResult,
+    Issue,
+    Relation,
+    RelationType,
+    Tolerance,
+)
 from build123d.agentic.parameters import (
     EngineeringParameter,
     ParamStatus,
@@ -42,4 +51,12 @@ __all__ = [
     "EngineeringParameter",
     "ParamStatus",
     "ParameterLedger",
+    # feature graph
+    "FeatureGraph",
+    "FeatureNode",
+    "ImpactResult",
+    "Issue",
+    "Relation",
+    "RelationType",
+    "Tolerance",
 ]
