@@ -213,12 +213,13 @@ build123d models are code, so AI agents can write them — but code alone gives 
 
 | Module | What it gives the agent |
 |---|---|
-| `spatial_context` | measured spatial context: coordinates, bounding boxes, analytic surface equations (plane/cylinder/cone/sphere/torus) — geometry as context, never guessed |
+| `spatial_context` | measured spatial context: coordinates, bounding boxes, analytic surface equations (plane/cylinder/cone/sphere/torus) — geometry as context, never guessed. `diff_contexts` reports what a change actually did to the geometry |
 | `interference` | pairwise interference / contact / clearance detection with real kernel booleans — physics in the loop |
 | `parameters` | engineering parameters with epistemic status (measured / specified / calculated / estimated) so assumptions cannot pose as facts |
 | `feature_graph` | the spatial context graph: features as nodes, adjacency/joints/constraints/tolerances as edges, plus change-impact analysis |
-| `snippets` | parametric part snippets, a registry (parts-library connection point) and composition with provenance manifests |
-| `ui_bridge` | the manifest + rebuild-and-validate protocol that drag-and-drop UIs and agents both drive |
+| `snippets` | parametric part snippets, a registry (parts-library connection point) and composition with provenance manifests; instantiated parts carry their parameters into the graph automatically |
+| `ui_bridge` | the manifest + rebuild-and-validate protocol that drag-and-drop UIs and agents both drive; `sweep()` checks validity across a parameter range, `evaluate()` ranks candidate parameter sets (the decision-maker substrate) |
+| `studio` | **Agentic CAD Studio** — a local, dependency-free web workbench with an interactive 3D preview, live interference checking and the design's facts-vs-assumptions ledger |
 | `rag` | static, retrieval-ready chunking of CAD code for RAG pipelines |
 
 ```py
@@ -233,6 +234,26 @@ print(SpatialContext(pump).to_markdown())   # measured space for the prompt
 print(check_interference(pump).to_markdown())  # housing <-> impeller: INTERFERENCE ...
 graph = FeatureGraph.from_model(pump)       # what does a change affect?
 ```
+
+### Agentic CAD Studio
+
+Serve any `ParametricModel` as a local web workbench — drag a parameter, the
+model rebuilds through the same validated `build()` the agents use, and the
+result appears as an interactive 3D preview next to the interference report,
+the feature graph and the assumptions ledger. No extra dependencies, works
+offline:
+
+```py
+from build123d.agentic.studio import serve
+serve({"pump": pump_model})          # opens http://127.0.0.1:8000
+```
+
+```bash
+python -m build123d.agentic.studio my_models --port 8080   # module exposing MODELS
+```
+
+The browser and the agent drive one protocol (`POST /api/build`), so
+what the user sees and what the agent claims can never diverge.
 
 The intended loop — context → plan → build → **verify** → report — and the
 full manual live in [`docs/agentic/`](docs/agentic/overview.md); agents
