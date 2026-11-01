@@ -10,7 +10,7 @@ Real agentic CAD failures follow from exactly that:
 | Nobody notices when one part cuts into another after a dimension change | No non-hallucinating geometry check | [Interference Detection](interference-check.md) |
 | Changing one size silently merges with other constraints and "something else comes out" | Language context is a bag of meaning — there is no structure of *what depends on what* | [Feature Graph](feature-graph.md) |
 | The model treats its own guessed numbers as engineering facts | Values carry no epistemic status | [Parameters](parameters are documented inside [Feature Graph](feature-graph.md) and [UI Bridge](ui-bridge.md)) |
-| The human cannot see or correct intermediate results | No UI contract between agent and user | [UI Bridge](ui-bridge.md) |
+| The human cannot see or correct intermediate results | No UI contract between agent and user | [UI Bridge](ui-bridge.md) + [Studio](studio.md) |
 | Multi-part models drift apart; part files are not integrated | Parts are code, not addressable, parameterized units | [Snippets](snippets.md) |
 | Agents repeat past work; project knowledge is unfindable | Code is not retrieval-indexed | [RAG Indexing](rag-indexing.md) |
 
@@ -37,7 +37,9 @@ current research on agentic engineering design:
 ```
 
 The agent proposes; the kernel and the checks decide. An agent that skips
-step 4 has not designed anything — it has typed something.
+step 4 has not designed anything — it has typed something. The
+[Studio](studio.md) is step 5 made visible: the same loop in a browser,
+where the human can drag a parameter and watch every check re-run.
 
 ## Quick start
 
@@ -90,12 +92,26 @@ build123d implementation tasks validated by this layer.
 
 ## Roadmap (extensible by design)
 
-- **Decision-maker model**: rank candidate fixes by graph impact + check
-  results (the "3D design decision-maker" idea) — the graph is the substrate.
 - **Solver connections**: SymPy Mechanics for kinematics, SciPy for parameter
   fitting/optimization, external FEA for strength — all consume
   `EngineeringParameter` values and return `ParamStatus.CALCULATED` facts.
-- **UI frontends**: anything that can render `ParametricModel.manifest()` and
-  call `build(**changes)` — no framework lock-in.
+- **Deeper Studio**: dimension annotations on the 3D preview, sweep/evaluate
+  views (the API already returns them), design-state persistence across
+  sessions.
 - **Parts libraries**: distribute snippet packages; `SnippetRegistry.load()`
   already accepts any directory of snippet files.
+- **MCP transport**: expose the studio endpoints as MCP tools so any agent
+  framework can drive the same loop.
+
+## Shipped modules
+
+| Module | One-liner |
+|---|---|
+| `spatial_context` | measured context + `diff_contexts` between builds |
+| `interference` | pairwise interference / contact / clearance |
+| `parameters` | epistemic-status parameters and ledgers |
+| `feature_graph` | context graph + impact analysis + validation |
+| `snippets` | parametric parts, registry, composition manifests |
+| `ui_bridge` | manifests, rebuild-validate loop, `sweep`, `evaluate` |
+| `studio` | the local web workbench over the same protocol |
+| `rag` | static retrieval-ready chunking of CAD code |

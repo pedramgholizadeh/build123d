@@ -19,7 +19,13 @@ makes build123d usable by AI design agents:
 - `feature_graph.py` — the spatial context graph (features + adjacency /
   joints / constraints / tolerances) with change-impact analysis
 - `snippets.py` — parametric part snippets, registry, composition manifests
-- `ui_bridge.py` — the manifest + rebuild-and-validate protocol for UIs
+- `ui_bridge.py` — the manifest + rebuild-and-validate protocol for UIs,
+  plus `sweep()` (validity across a parameter range) and `evaluate()`
+  (ranked candidates — the decision-maker substrate)
+- `studio/` — the Agentic CAD Studio: a local, dependency-free web
+  workbench (`serve(models)` / `python -m build123d.agentic.studio module`)
+  whose HTTP API (`/api/build`, `/api/report`, ...) is the same protocol
+  agents use
 - `rag.py` — static AST chunking of CAD code for RAG
 
 The layer is strictly **additive**: it never modifies kernel classes.
@@ -77,9 +83,12 @@ not designed it:
    after every change; `FeatureGraph.impact(node, param=...)` before/after
    changing a parameter; `graph.validate()` before declaring done. `report.ok`
    is the gate — contacts are information, interferences are errors.
-5. **REPORT** — hand back `SpatialContext` + `InterferenceReport.to_markdown()`
-   + `FeatureGraph.impact().to_markdown()` + the assumption list. The user
-   gets evidence, not claims.
+5. **REPORT** — hand back `SpatialContext` + `ContextDiff` (what the edit
+   actually changed) + `InterferenceReport.to_markdown()` +
+   `FeatureGraph.impact().to_markdown()` + the assumption list. The user
+   gets evidence, not claims. For interactive review, serve the model with
+   `build123d.agentic.studio.serve({...})` so the user drags parameters
+   while you work on the same `/api/build` protocol.
 
 ## Hard rules
 
@@ -113,6 +122,7 @@ not designed it:
 
 - `docs/agentic/overview.md` — the layer's why and map
 - `docs/agentic/spatial-context.md`, `interference-check.md`,
-  `feature-graph.md`, `snippets.md`, `ui-bridge.md`, `rag-indexing.md`
+  `feature-graph.md`, `snippets.md`, `ui-bridge.md`, `studio.md`,
+  `rag-indexing.md`
 - `docs/agentic/spec-kit/` — spec → plan → tasks templates for CAD
 - `README.md` → "Agentic CAD layer" section
