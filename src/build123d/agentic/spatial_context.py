@@ -35,6 +35,7 @@ license:
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from build123d import Face, Shape
@@ -42,7 +43,14 @@ from build123d import Face, Shape
 from OCP.BRepAdaptor import BRepAdaptor_Surface
 from OCP.GeomAbs import GeomAbs_SurfaceType
 
-__all__ = ["SpatialContext", "shape_facts", "spatial_context"]
+__all__ = [
+    "ContextChange",
+    "ContextDiff",
+    "SpatialContext",
+    "diff_contexts",
+    "shape_facts",
+    "spatial_context",
+]
 
 #: Amount of surface detail included in the context.
 Detail = Literal["summary", "standard", "full"]
@@ -402,3 +410,193 @@ def spatial_context(
     """
     context = SpatialContext(shape, precision=precision, detail=detail)
     return context.to_markdown() if format == "markdown" else context.to_json()
+
+
+# ---------------------------------------------------------------------------
+# Context diffing: what actually changed geometrically between two builds
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class ContextChange:
+    """One measured difference between two spatial contexts.
+
+    Attributes:
+        part: name of the changed part ("model" for root-level fields).
+        field: what changed, e.g. "volume", "bbox.max", "centroid",
+            "surface_types", "surfaces.cylinder".
+        old: previous value.
+        new: current value.
+        delta: new - old for numeric fields, None otherwise.
+    """
+
+    part: str
+    field: str
+    old: Any
+    new: Any
+    delta: float | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """JSON-serializable representation."""
+        return {
+            "part": self.part,
+            "field": self.field,
+            "old": self.old,
+            "new": self.new,
+            "delta": self.delta,
+        }
+
+
+@dataclass
+class ContextDiff:
+    """The geometric difference between two spatial contexts.
+
+    Attributes:
+        changes: per-part, per-field differences.
+        added: names of parts present only in the new context.
+        removed: names of parts present only in the old context.
+    """
+
+    changes: list[ContextChange] = field(default_factory=list)
+    added: list[str] = field(default_factory=list)
+    removed: list[str] = field(default_factory=list)
+
+    @property
+    def changed_parts(self) -> list[str]:
+        """Sorted names of parts with at least one change."""
+        return sorted({change.part for change in self.changes})
+
+    @property
+    def empty(self) -> bool:
+        """True when the two contexts describe the same geometry."""
+        return not (self.changes or self.added or self.removed)
+
+    def to_dict(self) -> dict[str, Any]:
+        """JSON-serializable representation."""
+        return {
+            "changes": [change.to_dict() for change in self.changes],
+            "added": self.added,
+            "removed": self.removed,
+        }
+
+    def to_markdown(self) -> str:
+        """Render the diff as compact markdown for agent context."""
+        lines = ["# Context Diff"]
+        if self.empty:
+            lines.append("no geometric changes")
+            return "\n".join(lines)
+        for change in self.changes:
+            delta = f" (delta {change.delta:+g})" if change.delta is not None else ""
+            lines.append(
+                f"- {change.part}.{change.field}: {change.old} -> {change.new}{delta}"
+            )
+        if self.added:
+            lines.append(f"added parts: {', '.join(self.added)}")
+        if self.removed:
+            lines.append(f"removed parts: {', '.join(self.removed)}")
+        return "\n".join(lines)
+
+    def __str__(self) -> str:
+        return self.to_markdown()
+
+
+def _flat_facts(facts: dict[str, Any]) -> dict[str, Any]:
+    """Flatten one part's facts into comparable fields."""
+    flat: dict[str, Any] = {}
+    for key in ("volume", "area", "face_count"):
+        if key in facts:
+            flat[key] = facts[key]
+    bbox = facts.get("bounding_box") or {}
+    for axis in ("min", "max"):
+        if axis in bbox:
+            flat[f"bbox.{axis}"] = bbox[axis]
+    if "centroid" in facts:
+        flat["centroid"] = facts["centroid"]
+    if "surface_types" in facts:
+        flat["surface_types"] = facts["surface_types"]
+    equations: dict[str, list[Any]] = {}
+    for equation in facts.get("surfaces", []):
+        equations.setdefault(equation["type"], []).append(equation)
+    for kind, items in equations.items():
+        flat[f"surfaces.{kind}.count"] = len(items)
+        flat[f"surfaces.{kind}.equations"] = sorted(
+            items, key=lambda item: json.dumps(item, sort_keys=True)
+        )
+    return flat
+
+
+def diff_contexts(
+    old: dict[str, Any] | SpatialContext,
+    new: dict[str, Any] | SpatialContext,
+) -> ContextDiff:
+    """Compare two spatial contexts and report what changed geometrically.
+
+    The cheap, non-hallucinating answer to "what did that edit actually do":
+    every difference is a measured value from the kernel, so the agent (or
+    the reviewer) sees consequences instead of re-deriving them from a code
+    diff. Values are the rounded context numbers, so identical builds diff
+    to exactly nothing.
+
+    Args:
+        old: previous context (SpatialContext or its .data dict).
+        new: current context.
+
+    Returns:
+        A ContextDiff; ``.empty`` is True when geometry is unchanged.
+    """
+    old_data = old.data if isinstance(old, SpatialContext) else old
+    new_data = new.data if isinstance(new, SpatialContext) else new
+
+    def collect(facts: dict[str, Any], into: dict[str, dict[str, Any]]) -> None:
+        """Flatten a context tree: every named part -> its fields."""
+        into[facts["name"]] = _flat_facts(facts)
+        for child in facts.get("children", []):
+            collect(child, into)
+
+    old_parts: dict[str, dict[str, Any]] = {}
+    new_parts: dict[str, dict[str, Any]] = {}
+    collect(old_data, old_parts)
+    collect(new_data, new_parts)
+
+    result = ContextDiff()
+    result.added = sorted(set(new_parts) - set(old_parts))
+    result.removed = sorted(set(old_parts) - set(new_parts))
+
+    def _delta(old_value: Any, new_value: Any) -> float | None:
+        numeric = (int, float)
+        if (
+            isinstance(old_value, numeric)
+            and isinstance(new_value, numeric)
+            and not isinstance(old_value, bool)
+            and not isinstance(new_value, bool)
+        ):
+            return round(float(new_value) - float(old_value), 6) + 0.0
+        return None
+
+    for name in sorted(set(old_parts) & set(new_parts)):
+        old_fields, new_fields = old_parts[name], new_parts[name]
+        for key in sorted(set(old_fields) | set(new_fields)):
+            if old_fields.get(key, _MISSING) == new_fields.get(key, _MISSING):
+                continue
+            old_value = old_fields.get(key)
+            new_value = new_fields.get(key)
+            result.changes.append(
+                ContextChange(
+                    part=name,
+                    field=key,
+                    old=old_value,
+                    new=new_value,
+                    delta=_delta(old_value, new_value),
+                )
+            )
+    return result
+
+
+class _Missing:
+    """Sentinel so a field present in only one context registers as changed."""
+
+    def __eq__(self, other: Any) -> bool:
+        return isinstance(other, _Missing)
+
+
+_MISSING = _Missing()

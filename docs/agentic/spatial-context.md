@@ -73,10 +73,37 @@ shape_facts(pump, detail="summary")         # just the dict
 | `spatial_context(shape, format=..., detail=...)` | one-shot convenience |
 | `shape_facts(shape, detail=...)` | raw dict (JSON-serializable) |
 | `surface_equation(face)` | analytic equation of one face |
+| `diff_contexts(old, new)` | what changed geometrically between two builds |
+| `ContextDiff.changes / .added / .removed / .empty` | the diff, structured |
 
 Detail levels: `"summary"` (identity + bbox only), `"standard"` (default;
 analytic surfaces capped at 6 per type to control tokens), `"full"` (every
 analytic face — for small, precision-critical parts).
+
+## Diffing two builds
+
+After an edit, the question is not "what changed in the code" but "what
+changed in the geometry". `diff_contexts` answers with kernel-measured
+values only — identical builds diff to exactly nothing:
+
+```python
+from build123d.agentic import SpatialContext, diff_contexts
+
+before = SpatialContext(model.build(gap=2.0).shape)
+after = SpatialContext(model.build(gap=5.0).shape)
+print(diff_contexts(before, after).to_markdown())
+```
+
+```markdown
+# Context Diff
+- m.volume: 57047.787 -> 59347.787 (delta +2300)
+- m.bbox.max: [15.0, 15.0, 15.0] -> [15.0, 15.0, 18.0] (delta None)
+- m.child_0.surfaces.cylinder.count: 0 -> 1
+```
+
+Every change is a `ContextChange(part, field, old, new, delta)`; added and
+removed parts are listed separately. An agent should attach this diff to
+its edit reports instead of claiming effects from reading code.
 
 ## Agent workflow guidance
 

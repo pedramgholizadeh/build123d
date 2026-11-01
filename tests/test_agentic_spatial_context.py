@@ -5,7 +5,12 @@ import json
 import pytest
 
 from build123d import Axis, Box, Compound, Cylinder, GeomType, Pos
-from build123d.agentic import SpatialContext, shape_facts, spatial_context
+from build123d.agentic import (
+    SpatialContext,
+    diff_contexts,
+    shape_facts,
+    spatial_context,
+)
 from build123d.agentic.spatial_context import surface_equation
 
 
@@ -89,3 +94,43 @@ class TestCompoundContext:
         model = Compound(children=[body], label="m")
         context = SpatialContext(model)
         assert context.total_volume == pytest.approx(1000.0, abs=1e-6)
+
+
+class TestContextDiff:
+    def test_identical_contexts_diff_to_nothing(self):
+        model = Compound(children=[Box(10, 10, 10)], label="m")
+        assert diff_contexts(SpatialContext(model), SpatialContext(model)).empty
+
+    def test_dimension_change_is_measured(self):
+        small = Compound(children=[Box(10, 10, 10)], label="m")
+        big = Compound(children=[Box(10, 10, 20)], label="m")
+        diff = diff_contexts(SpatialContext(small), SpatialContext(big))
+        assert not diff.empty
+        volume = next(c for c in diff.changes if c.field == "volume")
+        assert volume.part == "m"
+        assert volume.old == 1000.0
+        assert volume.new == 2000.0
+        assert volume.delta == 1000.0
+        bbox = next(c for c in diff.changes if c.field == "bbox.max")
+        assert bbox.new[2] == 10.0
+        assert "->" in diff.to_markdown()
+
+    def test_added_and_removed_parts(self):
+        before = Compound(children=[Box(10, 10, 10)], label="m")
+        after_model = Compound(children=[Box(10, 10, 10), Cylinder(2, 4)], label="m")
+        diff = diff_contexts(SpatialContext(before), SpatialContext(after_model))
+        assert len(diff.added) == 1
+        assert not diff.removed
+        assert "added parts" in diff.to_markdown()
+
+    def test_accepts_plain_dicts(self):
+        model = Compound(children=[Box(5, 5, 5)], label="m")
+        data = SpatialContext(model).data
+        assert diff_contexts(data, data).empty
+
+    def test_surface_count_change(self):
+        plain = Compound(children=[Box(10, 10, 10)], label="m")
+        drilled = Compound(children=[Cylinder(2, 12)], label="m")
+        diff = diff_contexts(SpatialContext(plain), SpatialContext(drilled))
+        fields = {change.field for change in diff.changes}
+        assert "surface_types" in fields

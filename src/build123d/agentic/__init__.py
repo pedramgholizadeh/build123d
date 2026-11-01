@@ -68,7 +68,10 @@ from build123d.agentic.snippets import (
     snippet,
 )
 from build123d.agentic.spatial_context import (
+    ContextChange,
+    ContextDiff,
     SpatialContext,
+    diff_contexts,
     shape_facts,
     spatial_context,
 )
@@ -77,6 +80,9 @@ from build123d.agentic.ui_bridge import BuildResult, Parameter, ParametricModel
 __all__ = [
     # spatial context
     "SpatialContext",
+    "ContextChange",
+    "ContextDiff",
+    "diff_contexts",
     "shape_facts",
     "spatial_context",
     # interference
