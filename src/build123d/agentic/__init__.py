@@ -32,6 +32,14 @@ from build123d.agentic.interference import (
     InterferenceReport,
     check_interference,
 )
+from build123d.agentic.snippets import (
+    Composition,
+    ParamMeta,
+    SnippetMeta,
+    SnippetRegistry,
+    compose,
+    snippet,
+)
 from build123d.agentic.spatial_context import (
     SpatialContext,
     shape_facts,
@@ -59,4 +67,11 @@ __all__ = [
     "Relation",
     "RelationType",
     "Tolerance",
+    # snippets
+    "Composition",
+    "ParamMeta",
+    "SnippetMeta",
+    "SnippetRegistry",
+    "compose",
+    "snippet",
 ]
