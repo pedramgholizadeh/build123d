@@ -13,6 +13,11 @@ mechanical design agent. The recommended agent loop:
 5. report: markdown context, assumption list and impact analysis
 """
 
+from build123d.agentic.parameters import (
+    EngineeringParameter,
+    ParamStatus,
+    ParameterLedger,
+)
 from build123d.agentic.interference import (
     InterferencePair,
     InterferenceReport,
@@ -33,4 +38,8 @@ __all__ = [
     "InterferencePair",
     "InterferenceReport",
     "check_interference",
+    # parameters
+    "EngineeringParameter",
+    "ParamStatus",
+    "ParameterLedger",
 ]
