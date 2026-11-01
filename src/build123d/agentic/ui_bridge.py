@@ -47,7 +47,15 @@ from build123d.agentic.feature_graph import FeatureGraph
 from build123d.agentic.interference import InterferenceReport, check_interference
 from build123d.agentic.spatial_context import SpatialContext
 
-__all__ = ["BuildResult", "Parameter", "ParametricModel"]
+__all__ = [
+    "BuildResult",
+    "CandidateScore",
+    "EvaluationReport",
+    "Parameter",
+    "ParametricModel",
+    "SweepEntry",
+    "SweepReport",
+]
 
 
 @dataclass
@@ -138,6 +146,139 @@ class BuildResult:
     def to_json(self, indent: int | None = 2) -> str:
         """Render the result as a JSON string."""
         return json.dumps(self.to_dict(), indent=indent, ensure_ascii=False)
+
+
+@dataclass
+class SweepEntry:
+    """One build of a parameter sweep.
+
+    Attributes:
+        value: the swept parameter's value.
+        ok: True when the build validated clean.
+        errors: blocking problems found at this value.
+        warnings: non-blocking observations at this value.
+    """
+
+    value: Any
+    ok: bool
+    errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        """JSON-serializable representation."""
+        return {
+            "value": self.value,
+            "ok": self.ok,
+            "errors": self.errors,
+            "warnings": self.warnings,
+        }
+
+
+@dataclass
+class SweepReport:
+    """The result of sweeping one parameter over a range of values.
+
+    Attributes:
+        param: the swept parameter name.
+        entries: one entry per requested value, in request order.
+    """
+
+    param: str
+    entries: list[SweepEntry] = field(default_factory=list)
+
+    @property
+    def feasible_values(self) -> list[Any]:
+        """Values whose build validated clean, in sweep order."""
+        return [entry.value for entry in self.entries if entry.ok]
+
+    @property
+    def all_ok(self) -> bool:
+        """True when every swept value validated clean."""
+        return all(entry.ok for entry in self.entries)
+
+    def to_dict(self) -> dict[str, Any]:
+        """JSON-serializable representation."""
+        return {
+            "param": self.param,
+            "entries": [entry.to_dict() for entry in self.entries],
+        }
+
+    def to_markdown(self) -> str:
+        """Render the sweep as a compact markdown table."""
+        lines = [f"# Sweep: {self.param}", "| value | ok | findings |", "|---|---|---|"]
+        for entry in self.entries:
+            findings = "; ".join(entry.errors + entry.warnings) or "-"
+            lines.append(
+                f"| {entry.value} | {'yes' if entry.ok else 'NO'} | {findings} |"
+            )
+        return "\n".join(lines)
+
+    def __str__(self) -> str:
+        return self.to_markdown()
+
+
+@dataclass
+class CandidateScore:
+    """One ranked candidate parameter set.
+
+    Attributes:
+        rank: 1 = best.
+        score: objective value; lower is better.
+        result: the BuildResult of this candidate.
+    """
+
+    rank: int
+    score: float
+    result: BuildResult
+
+    def to_dict(self) -> dict[str, Any]:
+        """JSON-serializable representation."""
+        return {"rank": self.rank, "score": self.score, "result": self.result.to_dict()}
+
+
+@dataclass
+class EvaluationReport:
+    """Ranked candidate parameter sets - the decision-maker's verdict.
+
+    Attributes:
+        objective: human-readable description of the objective used.
+        scores: candidates sorted best-first, ranks 1..n.
+    """
+
+    objective: str
+    scores: list[CandidateScore] = field(default_factory=list)
+
+    @property
+    def best(self) -> CandidateScore | None:
+        """The top-ranked candidate, if any."""
+        return self.scores[0] if self.scores else None
+
+    def to_dict(self) -> dict[str, Any]:
+        """JSON-serializable representation."""
+        return {
+            "objective": self.objective,
+            "scores": [score.to_dict() for score in self.scores],
+        }
+
+    def to_markdown(self) -> str:
+        """Render the ranking as a compact markdown table."""
+        lines = [
+            f"# Candidate Evaluation ({self.objective})",
+            "| rank | score | ok | params | errors |",
+            "|---|---|---|---|---|",
+        ]
+        for score in self.scores:
+            params = ", ".join(
+                f"{key}={value}" for key, value in score.result.params.items()
+            )
+            lines.append(
+                f"| {score.rank} | {score.score:g} | {'yes' if score.result.ok else 'NO'} "
+                f"| {params} | {'; '.join(score.result.errors) or '-'} |"
+            )
+        return "\n".join(lines)
+
+    def __str__(self) -> str:
+        return self.to_markdown()
 
 
 class ParametricModel:
@@ -264,6 +405,82 @@ class ParametricModel:
             context_markdown=SpatialContext(shape).to_markdown(),
             interference=interference,
             graph=graph,
+        )
+
+    def sweep(self, param: str, values: Sequence[Any]) -> SweepReport:
+        """Build the model at every value of one parameter and validate each.
+
+        The mechanism check from the spec workflow (does the assembly stay
+        valid across the full stroke?): out-of-range or invalid values
+        produce failed entries, they never stop the sweep.
+
+        Args:
+            param: the parameter to vary; must be a declared parameter.
+            values: the values to try.
+
+        Returns:
+            A SweepReport with one entry per value, in request order.
+
+        Raises:
+            ValueError: if the parameter is not declared.
+        """
+        if param not in self.parameters:
+            raise ValueError(f"unknown parameter '{param}'")
+        report = SweepReport(param=param)
+        for value in values:
+            result = self.build(**{param: value})
+            report.entries.append(
+                SweepEntry(
+                    value=value,
+                    ok=result.ok,
+                    errors=result.errors,
+                    warnings=result.warnings,
+                )
+            )
+        return report
+
+    def evaluate(
+        self,
+        candidates: Sequence[Mapping[str, Any]],
+        *,
+        objective: Callable[[BuildResult], float] | None = None,
+    ) -> EvaluationReport:
+        """Rank candidate parameter sets - the decision-maker substrate.
+
+        The agent (or the user) proposes; the builds and their checks
+        decide. Every candidate goes through the same :meth:`build`
+        validation as any other rebuild, then is scored: lower is better.
+        The default objective penalizes errors heavily and warnings
+        lightly (``1000*errors + 10*warnings``); pass a custom objective
+        (e.g. maximize a clearance, minimize mass) to encode design intent.
+
+        Args:
+            candidates: parameter mappings; each is one candidate.
+            objective: optional callable mapping a BuildResult to a
+                lower-is-better score.
+
+        Returns:
+            An EvaluationReport sorted best-first with ranks 1..n.
+        """
+        description = (
+            "custom objective" if objective else "default: 1000*errors + 10*warnings"
+        )
+        scored: list[tuple[float, int, BuildResult]] = []
+        for index, overrides in enumerate(candidates):
+            result = self.build(**dict(overrides))
+            score = (
+                objective(result)
+                if objective
+                else 1000.0 * len(result.errors) + 10.0 * len(result.warnings)
+            )
+            scored.append((score, index, result))
+        scored.sort(key=lambda item: (item[0], item[1]))
+        return EvaluationReport(
+            objective=description,
+            scores=[
+                CandidateScore(rank=rank, score=score, result=result)
+                for rank, (score, _, result) in enumerate(scored, start=1)
+            ],
         )
 
     def manifest(self) -> dict[str, Any]:

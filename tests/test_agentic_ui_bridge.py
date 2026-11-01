@@ -138,3 +138,60 @@ class TestParametricModel:
         assert result.interference is None
         assert result.graph is None
         assert result.context_markdown  # context always provided
+
+
+class TestSweep:
+    def test_sweep_entries_in_order(self, model):
+        report = model.sweep("gap", [0.0, 5.0, 25.0])
+        assert [entry.value for entry in report.entries] == [0.0, 5.0, 25.0]
+        # 0 -> small clean clearance, 5 -> clean, 25 -> out of bounds
+        assert report.entries[0].ok and not report.entries[0].warnings
+        assert report.entries[1].ok and not report.entries[1].warnings
+        assert not report.entries[2].ok
+        assert report.feasible_values == [0.0, 5.0]
+        assert not report.all_ok
+        assert "| 5.0 | yes |" in report.to_markdown()
+
+    def test_sweep_unknown_parameter(self, model):
+        with pytest.raises(ValueError):
+            model.sweep("bogus", [1.0])
+
+    def test_sweep_report_serializable(self, model):
+        report = model.sweep("gap", [5.0])
+        assert report.to_dict()["entries"][0]["ok"] is True
+
+
+class TestEvaluate:
+    @pytest.fixture()
+    def collidable(self) -> ParametricModel:
+        def collidable(gap: float = 2.0) -> Compound:
+            return _fixture_model(gap=gap)
+
+        return ParametricModel(
+            "collidable",
+            collidable,
+            [Parameter("gap", 2.0, minimum=-10.0, maximum=10.0)],
+        )
+
+    def test_feasible_candidate_wins(self, collidable):
+        report = collidable.evaluate([{"gap": -5.0}, {"gap": 2.0}, {"gap": 99.0}])
+        assert report.best is not None
+        assert report.best.rank == 1
+        assert report.best.result.params["gap"] == 2.0
+        assert report.best.result.ok
+        assert report.scores[2].result.errors  # the invalid candidate ranks last
+        assert "1000*errors" in report.objective
+
+    def test_custom_objective(self, collidable):
+        # prefer the largest gap among feasible candidates
+        report = collidable.evaluate(
+            [{"gap": 1.0}, {"gap": 5.0}],
+            objective=lambda result: -result.params["gap"],
+        )
+        assert report.best.result.params["gap"] == 5.0
+        assert report.objective == "custom objective"
+
+    def test_evaluation_markdown_and_dict(self, collidable):
+        report = collidable.evaluate([{"gap": 1.0}])
+        assert "| 1 |" in report.to_markdown()
+        assert report.to_dict()["scores"][0]["rank"] == 1

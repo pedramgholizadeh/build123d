@@ -75,7 +75,15 @@ from build123d.agentic.spatial_context import (
     shape_facts,
     spatial_context,
 )
-from build123d.agentic.ui_bridge import BuildResult, Parameter, ParametricModel
+from build123d.agentic.ui_bridge import (
+    BuildResult,
+    CandidateScore,
+    EvaluationReport,
+    Parameter,
+    ParametricModel,
+    SweepEntry,
+    SweepReport,
+)
 
 __all__ = [
     # spatial context
@@ -110,8 +118,12 @@ __all__ = [
     "snippet",
     # ui bridge
     "BuildResult",
+    "CandidateScore",
+    "EvaluationReport",
     "Parameter",
     "ParametricModel",
+    "SweepEntry",
+    "SweepReport",
     # rag
     "CodeChunk",
     "chunk_directory",
