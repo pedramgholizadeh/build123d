@@ -45,6 +45,7 @@ from build123d.agentic.spatial_context import (
     shape_facts,
     spatial_context,
 )
+from build123d.agentic.ui_bridge import BuildResult, Parameter, ParametricModel
 
 __all__ = [
     # spatial context
@@ -74,4 +75,8 @@ __all__ = [
     "SnippetRegistry",
     "compose",
     "snippet",
+    # ui bridge
+    "BuildResult",
+    "Parameter",
+    "ParametricModel",
 ]
